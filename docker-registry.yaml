@@ -1,0 +1,473 @@
+swagger: '2.0'
+
+# Document metadata
+info:
+  version: "1.6"
+  title: "Docker Registry HTTP API"
+
+# Parameters
+parameters:
+  name:
+    name: name
+    in: path
+    description: Name of the image (including the namespace)
+    type: string
+    required: true
+  reference:
+    name: reference
+    in: path
+    description: A tag or a digest, pointing to a specific image
+    type: string
+    required: true
+  digest:
+    name: digest
+    in: path
+    description: Digest of a desired BLOB
+    type: string
+    required: true
+
+# ENDPOINTS
+paths:
+  /v2:
+    get:
+      description:
+        Tells whether this Docker Registry instance supports
+        Docker Registry HTTP API v2
+      responses:
+        200:
+          description: Successful response. API v2 supported
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description: Registry does not implement v2 of the API
+
+  # RETRIEVE INFORMATION ABOUT TAGS
+  /v2/{name}/tags/list:
+    parameters:
+      - $ref: '#/parameters/name'
+    get:
+      description:
+        Fetch the tags under the repository identified by 'name'
+      responses:
+        200:
+          description: Gives a list of tags for the names repository.
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description: The named manifest could not be found in the Registry
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+
+  # RETRIEVE/MANIPULATE THE SPECIFIED MANIFEST FROM THE REGISTRY
+  /v2/{name}/manifests/{reference}:
+    parameters:
+      - $ref: '#/parameters/name'
+      - $ref: '#/parameters/reference'
+    get:
+      description:
+        Pulls the image manifest file associated with the specified
+        name and reference. Reference may be a tag or a digest
+      responses:
+        200:
+          description: Returns the requested manifest file
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Layers'
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description: The named manifest could not be found in the Registry
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+    put:
+      description:
+        Put the manifest identified by name and reference where
+        reference can be a tag or digest.
+      responses:
+        202:
+          description:
+            The manifest has been accepted by the registry and is
+            stored under the specified name and tag.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+    delete:
+      description:
+        Delete the manifest identified by name and reference
+        where reference can be a tag or digest.
+      responses:
+        202:
+          description:
+            The manifest has been accepted by the registry and is
+            stored under the specified name and tag.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description: The named manifest could not be found in the Registry
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+
+  # RETRIEVE/MANIPULATE THE SPECIFIED BLOB FROM THE REGISTRY
+  /v2/{name}/blobs/{digest}:
+    parameters:
+      - $ref: '#/parameters/name'
+      - $ref: '#/parameters/digest'
+    get:
+      description:
+        Retrieve the blob from the registry identified by digest.
+      responses:
+        200:
+          description:
+            The blob identified by digest is available.
+            The blob content will be present in the body of the response.
+          schema:
+            type: string
+            format: binary
+        206:
+          description:
+            The blob identified by digest is available.
+            The specified chunk of blob content will be present in
+            the body of the request.
+          schema:
+            type: string
+            format: binary
+        307:
+          description:
+            The blob identified by digest is available at the provided location.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description:
+            The blob, identified by name and digest, is unknown to the registry.
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        416:
+          description: The range specification cannot be satisfied for the requested content.
+    head:
+      description: Same as GET, except only the headers are returned.
+      responses:
+        200:
+          description:
+            The blob identified by digest is available.
+            The blob content will be present in the body of the response.
+        206:
+          description:
+            The blob identified by digest is available.
+            The specified chunk of blob content will be present in
+            the body of the request.
+        307:
+          description:
+            The blob identified by digest is available at the provided location.
+        400:
+          description: On failure
+        401:
+          description: Unauthorized access
+        404:
+          description:
+            The blob, identified by name and digest, is unknown to the registry.
+        416:
+          description:
+            The range specification cannot be satisfied for the requested content.
+
+  # INITIATE BLOB UPLOAD
+  /v2/{name}/blobs/uploads:
+    parameters:
+      - $ref: '#/parameters/name'
+    post:
+      description:
+        Upload a blob identified by the digest parameter in single request.
+        This upload will not be resumable unless a recoverable error is returned.
+      parameters:
+        - name: digest
+          description:
+            Digest of uploaded blob. If present, the upload will be
+            completed, in a single request, with contents of the request body
+            as the resulting blob.
+          type: string
+          in: query
+      responses:
+        201:
+          description:
+            The blob has been created in the registry and is available
+            at the provided location.
+        202:
+          description:
+            The upload has been created. The Location header must be used to
+            complete the upload. The response should be identical to a GET
+            request on the contents of the returned Location header.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+
+  # BLOB UPLOAD
+  /v2/{name}/blobs/uploads/{uuid}:
+    parameters:
+      - $ref: '#/parameters/name'
+      - name: uuid
+        description: A uuid identifying the upload.
+        type: string
+        in: path
+        required: true
+    get:
+      description:
+        Retrieve status of upload identified by uuid. The primary purpose
+        of this endpoint is to resolve the current status of a resumable upload.
+      responses:
+        204:
+          description:
+            The upload is known and in progress. The last received offset
+            is available in the Range header.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description:
+            The upload is unknown to the registry. The upload must be restarted.
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+    patch:
+      description:
+        Upload a stream of data to upload without completing the upload.
+      responses:
+        204:
+          description:
+            The stream of data has been accepted and the current progress is
+            available in the range header. The updated upload location is
+            available in the Location header.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description:
+            The upload is unknown to the registry. The upload must be restarted.
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        416:
+          description:
+            The Content-Range specification cannot be accepted, either because
+            it does not overlap with the current progress or it is invalid.
+    put:
+      description:
+          Complete the upload, providing all the data in the body, if necessary.
+          A request without a body will just complete the upload with previously
+          uploaded content.
+      parameters:
+        - name: digest
+          description:
+            Digest of uploaded blob. If present, the upload will be
+            completed, in a single request, with contents of the request body
+            as the resulting blob.
+          type: string
+          in: query
+          required: true
+      responses:
+        204:
+          description:
+            The upload has been completed and accepted by the registry.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description:
+            The upload is unknown to the registry. The upload must be restarted.
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+    delete:
+      description:
+        Cancel outstanding upload processes, releasing associated resources.
+        If this is not called, the unfinished uploads will eventually timeout.
+      responses:
+        204:
+          description:
+            The upload has been successfully deleted.
+        400:
+          description: On failure
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        401:
+          description: Unauthorized access
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+        404:
+          description:
+            The upload is unknown to the registry. The client may ignore this
+            error and assume the upload has been deleted.
+          schema:
+            type: object
+            properties:
+              data:
+                $ref: '#/definitions/Error'
+
+# DEFINITIONS
+definitions:
+  Error:
+    type: object
+    properties:
+      errors:
+        type: array
+        items:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            detail:
+              type: string
+  Layers:
+    type: object
+    properties:
+      name:
+        type: string
+      tag:
+        type: string
+      fsLayers:
+        type: array
+        items:
+          type: object
+          properties:
+            blobSum:
+              type: string
+      history:
+        type: string
+      signature:
+        type: string
